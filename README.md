@@ -65,7 +65,8 @@ from xps_analysis import (
 
 spectrum = load_spectrum("spectrum.csv")
 background = shirley_background(spectrum.energy, spectrum.intensity)
-fit = fit_peaks(spectrum, [PeakSpec("gaussian")], background=background)
+fit = fit_peaks(spectrum, [PeakSpec("gaussian")], background=background,
+                background_energy=spectrum.energy)
 print(fit.peaks)        # center_eV、fwhm_eV、area
 print(fit.r_squared)
 print(fit.residual)     # 扣背景数据 - 峰拟合；等于原始数据 - 总拟合
@@ -78,7 +79,7 @@ plt.close(figure)
 # fit = fit_peaks(spectrum, [
 #     PeakSpec("voigt", center=780.0, sigma=0.8, area=100, gamma=0.4),
 #     PeakSpec("voigt", center=782.0, sigma=0.8, area=60, gamma=0.4),
-# ], background=background)
+# ], background=background, background_energy=spectrum.energy)
 ```
 
 Python API 导出函数会写入指定路径，调用方应选择新的目标文件。
@@ -125,3 +126,44 @@ MPLBACKEND=Agg python -m unittest discover -s tests -v
 测试覆盖三种文件格式、手动列选择、无表头数据、错误输入、已知 Shirley
 背景恢复、非均匀能量采样、三种带噪声峰模型参数恢复、多峰拟合、
 残差、Excel 内容、600 dpi PNG、轴方向和命令行完整流程。
+
+## V0.2：Windows 桌面 GUI
+
+基于 PySide6 + PyQtGraph 的三栏科研分析界面，复用上方核心算法。
+完整安装、参数定义、项目格式、已知限制和使用步骤见
+[Windows V0.2 使用指南](docs/windows-v02.md)，验证记录见
+[V0.2 测试与交付说明](docs/v02-validation.md)。
+
+Windows 10/11 推荐安装 **Python 3.12 x64**，在 PowerShell 中运行：
+
+```powershell
+py -3.12 -m venv .venv
+.\.venv\Scripts\python.exe -m pip install -r requirements.txt
+.\.venv\Scripts\python.exe -m pip install --no-deps -e .
+.\.venv\Scripts\python.exe -m xps_studio
+```
+
+也可运行 `install_windows.cmd` 安装，然后使用 `run_studio.cmd` 启动；
+这些是源代码启动辅助脚本，不是 EXE 安装包。Windows 本机尚待验证。
+
+云端已配置的环境可运行：
+
+```bash
+source /workspace/venvs/codex-analysis/bin/activate
+python -m pip install -r requirements.txt
+python -m xps_studio
+# 无显示器时，仅作自动化检查：
+QT_QPA_PLATFORM=offscreen python -m xps_studio --smoke-test
+QT_QPA_PLATFORM=offscreen python -m unittest discover -s tests -v
+```
+
+快速操作：导入数据 → 选择/拖动拟合能区 → 添加峰 → 编辑峰位、FWHM、面积
+及上下限/固定开关 → Fit → 查看分峰、总拟合、残差、R²/RMSE → 导出或保存 JSON。
+输入列不明确时弹出手动映射窗口，可选择无表头、分隔符和 Excel 工作表。
+Voigt GUI 使用固定 γ/σ 比例及近似 FWHM 作为宽度参数化；核心 API 仍支持
+独立 σ、γ。详见使用指南，勿将峰高与面积混用。
+
+V0.2 同时修复了第一阶段审查发现的五个边界问题。旧审查报告保留为历史记录，
+其中失败状态不是当前版本状态。背景数组属于原始坐标时，必须通过
+`background_energy` 传入这些坐标；经过排序的 Spectrum 禁止使用没有坐标的
+外部背景，防止静默错位。

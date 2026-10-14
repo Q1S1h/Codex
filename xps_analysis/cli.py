@@ -32,7 +32,8 @@ def main(argv=None):
         header=None if args.headerless else 0,
         separator="\t" if args.separator == r"\t" else args.separator)
     bg = shirley_background(spectrum.energy, spectrum.intensity) if args.background == "shirley" else None
-    fit = fit_peaks(spectrum, [PeakSpec(args.model)], background=bg)
+    fit = fit_peaks(spectrum, [PeakSpec(args.model)], background=bg,
+                    background_energy=spectrum.energy if bg is not None else None)
     for name, result in [("raw.png", None), ("fit.png", fit)]:
         fig = plot_spectrum(spectrum, result)
         export_png(fig, args.output/name)

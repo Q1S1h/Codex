@@ -20,6 +20,9 @@ def shirley_background(energy, intensity, *, tolerance=1e-7, max_iterations=1000
     xs, ys = x[order], y[order]
     if np.any(np.diff(xs) <= 0):
         raise ValueError("Binding energies must be unique")
+    # Work relative to an endpoint so a large DC offset cannot loosen convergence.
+    offset = ys[0]
+    ys = ys - offset
     background = np.interp(xs, [xs[0], xs[-1]], [ys[0], ys[-1]])
     if ys[0] != ys[-1]:
         scale = max(np.max(np.abs(ys)), 1.0)
@@ -38,5 +41,5 @@ def shirley_background(energy, intensity, *, tolerance=1e-7, max_iterations=1000
         else:
             raise RuntimeError("Shirley background did not converge; check region endpoints")
     result = np.empty_like(background)
-    result[order] = background
+    result[order] = background + offset
     return result

@@ -1,8 +1,7 @@
-"""Independent numerical checks and unresolved review regressions.
+"""Independent numerical checks and review regressions.
 
-KnownDefectRegressionTests assert the desired safe behavior and intentionally
-remain ordinary failing tests while the application is unchanged. They are not
-skipped or marked expectedFailure: the review report lists the failures.
+Regression tests now verify the fixes made during V0.2 development; no tests
+are skipped or marked expectedFailure.
 """
 import tempfile
 import unittest
@@ -257,12 +256,16 @@ class ReviewBoundaryTests(unittest.TestCase):
 
 
 class KnownDefectRegressionTests(unittest.TestCase):
-    """These tests should pass after the review findings are fixed separately."""
+    """Regression coverage of the five review findings, fixed in V0.2."""
 
     def test_descending_background_aligns_with_sorted_spectrum(self):
         x, y, bg = synthetic_shirley()
         descending_bg = shirley_background(x[::-1], y[::-1])
-        fit = fit_peaks(Spectrum(x[::-1], y[::-1]), background=descending_bg)
+        spectrum = Spectrum(x[::-1], y[::-1])
+        # A bare array is ambiguous once Spectrum has sorted its input.
+        with self.assertRaisesRegex(ValueError, 'background_energy'):
+            fit_peaks(spectrum, background=descending_bg)
+        fit = fit_peaks(spectrum, background=descending_bg, background_energy=x[::-1])
         np.testing.assert_allclose(fit.corrected, y-bg, atol=1e-5,
             err_msg='Background returned in original order is silently paired with sorted data')
 

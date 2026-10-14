@@ -33,12 +33,19 @@ class FitResult:
     def total_fit(self):
         return self.background + self.model_result.best_fit
 
+    @property
+    def rmse(self):
+        return float(np.sqrt(np.mean(self.residual**2)))
 
-def fit_peaks(spectrum, peaks=None, *, background=None):
+
+def fit_peaks(spectrum, peaks=None, *, background=None, background_energy=None,
+              parameter_settings=None):
     """Fit one or more nonnegative-area peaks to background-corrected data.
 
     For multiple peaks supply center estimates to prevent identical initialization.
     Voigt gamma is independent of sigma. Widths are always positive.
+    Background coordinates must be explicit when the input Spectrum was reordered.
+    parameter_settings maps lmfit names to value/min/max/vary/expr settings.
     """
     specs = list(peaks) if peaks is not None else [PeakSpec()]
     if not specs:
@@ -47,6 +54,16 @@ def fit_peaks(spectrum, peaks=None, *, background=None):
     bg = np.zeros_like(y) if background is None else np.asarray(background, dtype=float).copy()
     if bg.shape != y.shape or not np.isfinite(bg).all():
         raise ValueError("Background must match spectrum and be finite")
+    if background is not None and background_energy is not None:
+        coordinates = np.asarray(background_energy, dtype=float)
+        if coordinates.shape != x.shape or not np.isfinite(coordinates).all():
+            raise ValueError("Background coordinates must match the spectrum")
+        order = np.argsort(coordinates)
+        if not np.array_equal(coordinates[order], x):
+            raise ValueError("Background coordinates differ from spectrum energy")
+        bg = bg[order]
+    elif background is not None and spectrum.was_reordered:
+        raise ValueError("Specify background_energy for a reordered spectrum to avoid background misalignment")
     corrected = y-bg
     models = {"gaussian": GaussianModel, "lorentzian": LorentzianModel, "voigt": VoigtModel}
     combined, params = None, None
@@ -77,6 +94,19 @@ def fit_peaks(spectrum, peaks=None, *, background=None):
             params = p
         else:
             params.update(p)
+    for name, setting in (parameter_settings or {}).items():
+        if name not in params or name.endswith(("fwhm", "height")):
+            raise ValueError(f"Unsupported fit parameter: {name}")
+        params[name].set(**setting)
+    for name, parameter in params.items():
+        if parameter.expr:
+            continue
+        if not np.isfinite(parameter.value) or parameter.min >= parameter.max:
+            raise ValueError(f"Invalid parameter or bounds: {name}")
+        if name.endswith(("sigma", "gamma")) and parameter.min <= 0:
+            raise ValueError(f"Width must have a positive lower bound: {name}")
+        if name.endswith("amplitude") and parameter.min < 0:
+            raise ValueError("Peak area cannot have a negative lower bound")
     if len(x) <= sum(p.vary for p in params.values()):
         raise ValueError("Insufficient data points for fitted parameters")
     result = combined.fit(corrected, params, x=x, nan_policy="raise")
@@ -90,5 +120,8 @@ def fit_peaks(spectrum, peaks=None, *, background=None):
         rows.append({"peak": f"p{i}", "model": spec.kind.lower(),
                      "center_eV": p[f"p{i}_center"].value,
                      "fwhm_eV": p[f"p{i}_fwhm"].value,
-                     "area": p[f"p{i}_amplitude"].value})
+                     "area": p[f"p{i}_amplitude"].value,
+                     "height": p[f"p{i}_height"].value,
+                     "sigma_eV": p[f"p{i}_sigma"].value,
+                     "gamma_eV": p[f"p{i}_gamma"].value if spec.kind.lower() == "voigt" else np.nan})
     return FitResult(spectrum, bg, corrected, result, pd.DataFrame(rows), r2)
